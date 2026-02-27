@@ -1,0 +1,141 @@
+#include"stdio.h"
+#include"conio.h"
+#include"math.h"
+#include<stdlib.h>
+#include<malloc.h>
+#include "mex.h"
+struct piont
+{
+	long corx;
+	long cory;
+	long corz;
+	struct piont *next;
+};
+long find(double *x, double *y, double *z, long xo, long yo, long zo);
+void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+	double *img, *x, *y, *z, *id, *outx, *outy, *outz,value;
+	double *weight;
+	const size_t *q;
+	long M, u, v, w, num;
+	long i, j, k, s, t, scr, scrx, scry, scrz, scr0,i2,j2;
+	struct piont *head, *end, *med;
+	img = mxGetPr(prhs[0]);
+	x = mxGetPr(prhs[1]);
+	y = mxGetPr(prhs[2]);
+	z = mxGetPr(prhs[3]);
+	s = mxGetScalar(prhs[4]);
+	t = mxGetScalar(prhs[5]);
+	q = mxGetDimensions(prhs[0]);
+	u = long(q[0]);
+	v = long(q[1]);
+	w = long(q[2]);
+//     mexPrintf("%d %d %d\n", u,v,w);
+	//plhs[0] = mxCreateDoubleMatrix(u, v, mxREAL);
+	//id = mxGetPr(plhs[0]);
+	id = (double*)malloc(u*v*w*sizeof(double));
+	for (i = 0; i < u; i++)
+		for (j = 0; j < v; j++)
+			for (k = 0; k < w; k++)
+				id[u*v*k + i+ j*u] = u*v*w;
+	scrx = long(x[s - 1]);
+	scry = long(y[s - 1]);
+	scrz = long(z[s - 1]);
+	scr0 = long(scrx * u + scry + scrz * u*v);
+   // mexPrintf("%f\n", img[scr0]);
+	img[scr0] = 0;
+	id[scr0] = 0;
+	head = (struct piont*)malloc(sizeof(struct piont));
+	head->corx = scrx;
+	head->cory = scry;
+	head->corz = scrz;
+	head->next = NULL;
+	end = head;
+	while (scrx != x[t - 1] || scry != y[t - 1] || scrz != z[t - 1])
+	{
+		for (i = -1; i <= 1; i++)
+			for (j = -1; j <= 1; j++)
+				for (k = -1; k <= 1; k++)
+				{
+					scr = long((j + scrx) * u + (i + scry) + (k + scrz) * u*v);
+					if (img[scr] == 1)
+					{
+						img[scr] = 0;
+						//mexPrintf("%f\n", img[scr]);
+						//scr = (i + y[crnt])* v + j + x[crnt];
+						id[scr] = id[scr0] + 1;// sqrt(j*j + i*i + k*k);//1
+//                         mexPrintf("%f %f\n", id[scr0],id[scr]);
+						//num = find(x, y, z, j + x[crnt], i + y[crnt], k + z[crnt]);
+						end->next = (struct piont*)malloc(sizeof(struct piont));
+						end = end->next;
+						end->corx = scrx+j;
+						end->cory = scry+i;
+						end->corz = scrz+k;
+						end->next = NULL;
+//                         mexPrintf("%d %d %d %d\n",  scrx+j,scry+i, scrz+k,scr);
+					}
+				}
+		med = head->next;
+		free(head);
+		head = med;
+		scrx = head->corx;
+		scry = head->cory;
+		scrz = head->corz;
+		scr0 = long(scrx * u + scry + scrz * u*v);
+//          mexPrintf("%d %d %d %d\n",  scrx,scry, scrz,scr0);
+//         mexPrintf("%f\n", id[scr0]);
+	}
+//  	mexPrintf("%d\n", img[scr]);
+	 while (head != NULL)
+	{
+		med = head->next;
+		free(head);
+		head = med;
+	}
+	i2 = id[long(x[t - 1] * u + y[t - 1] + z[t - 1] * u*v)] + 1;
+//  	mexPrintf("%d %f\n",i2,id[long(x[t - 1] * u + y[t - 1] + z[t - 1] * u*v)]);
+	plhs[0] = mxCreateDoubleMatrix(1, i2, mxREAL);
+	plhs[1] = mxCreateDoubleMatrix(1, i2, mxREAL);
+	plhs[2] = mxCreateDoubleMatrix(1, i2, mxREAL);
+	outx = mxGetPr(plhs[0]);
+	outy = mxGetPr(plhs[1]);
+	outz = mxGetPr(plhs[2]);
+	outx[0] = x[s-1];
+	outx[i2 - 1] = x[t-1];
+	outy[0] = y[s-1];
+	outy[i2 - 1] = y[t-1];
+	outz[0] = z[s-1];
+	outz[i2 - 1] = z[t-1];
+//     mexPrintf("%f %f %f\n",outx[i2 - 1],outy[i2 - 1],outz[i2 - 1]);
+	for (j2 = i2 - 2; j2 > 0; j2--)
+	{
+		scr0 = outx[j2 + 1] * u + outy[j2 + 1] + outz[j2 + 1] * u*v;
+		value = id[scr0];
+		for (i = -1; i <= 1; i++)
+			for (j = -1; j <= 1; j++)
+				for (k = -1; k <= 1; k++)
+				{
+					scr = (j + outx[j2 + 1]) * u + (i + outy[j2 + 1]) + (k + outz[j2 + 1]) * u*v;
+					if (id[scr] <value)
+					{
+						outx[j2] = j + outx[j2 + 1];
+						outy[j2] = i + outy[j2 + 1];
+						outz[j2] = k + outz[j2 + 1];
+//                         mexPrintf("%f %f %f\n",outx[j2],outy[j2],outz[j2]);
+						value = id[scr];
+					}
+				}
+	}
+	free(id);
+}
+
+long find(double *x, double *y, double *z, long xo, long yo, long zo)
+{
+	long i = 0;
+	while (1)
+	{
+		if (x[i] == xo&&y[i] == yo&&z[i] == zo)
+			return i;
+		i++;
+	}
+}
