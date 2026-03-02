@@ -1,0 +1,753 @@
+%ver-最好
+% function [VesData2D_Match,weight_solve] = DenseMatching(VesData3D_Seg,VesData2D,N,VesData3D_Proj,degree3d)
+% Num_seg=size(VesData3D_Seg,2);
+% VesData2D_Match=VesData3D_Proj; %%解决了向零点拉扯的问题
+% vessel_2D=VesData2D.node_positions; %DSA分割血管
+% img_DT=VesData2D.img_DT; 
+% m=size(img_DT,1);
+% NN=size(vessel_2D,1);
+% 
+% %
+% weight_solve=ones(size(VesData3D_Proj,1),1);
+% 
+% % NS=createns(vessel_2D,'NSMethod','kdtree');
+% % [idxs,~]=knnsearch(NS,VesData3D_Proj,'k',1);
+% % vessel_2Dmatch=vessel_2D(idxs,:);   %投影点在DSA分割血管中的最近对应点
+% 
+% %分岔点待启动！
+% % VesData2D.Centerline=remove_short_branches(VesData2D.Centerline,11);
+% % 这里要取消注释
+% figure;
+% plot(vessel_2D(:,1),vessel_2D(:,2),'g.');
+% hold on;
+% plot(VesData3D_Proj(:,1),VesData3D_Proj(:,2),'r.');
+% % plot(VesData2D.Centerline(:,1),VesData2D.Centerline(:,2),'b.');
+% axis equal
+% 
+% 
+% adj_ves2d=buildadj(VesData2D.Centerline);
+% degree=sum(adj_ves2d,2);
+% 
+% 
+% %%%找到子树 new
+% child_tree=cell(Num_seg,1);
+% parent=zeros(Num_seg,1);
+% for i=1:Num_seg
+%     child_tree{i}=i;
+%     endid=VesData3D_Seg(i).idx(end);
+%     for j=i+1:Num_seg
+%         startid=VesData3D_Seg(j).idx(1);
+%         if startid==endid
+%             parent(j)=i;
+%         end
+%     end
+% end
+% for i=Num_seg:-1:2
+%     par=parent(i);
+%     child_tree{par}=[child_tree{par};child_tree{i}];
+% end
+% %%%
+% 
+% 
+% for i=1:Num_seg
+%     vestemp=VesData3D_Seg(i).positions;
+%     vesidx=VesData3D_Seg(i).idx;
+%     %vestemp_proj=Proj(vestemp',VesData2D.K); %该段的投影
+%     vestemp_proj=VesData3D_Proj(vesidx,:); %3D投影点
+% 
+%     num_pot=size(vestemp,1);%这一段的点数量
+%     %起点和终点的id号
+% 
+%     startid=VesData3D_Seg(i).idx(2);endid=VesData3D_Seg(i).idx(num_pot);
+%     if i==1, startid=VesData3D_Seg(i).idx(1);end
+%     ap=vesidx(1);
+%     ds=VesData2D_Match(ap,:)-vestemp_proj(1,:);
+% 
+% 
+%     %找到该段与之前段的邻接点，并整体漂移
+%     if i~=1 && norm(ds)>2
+% 
+%         %%%位移前误差 new
+%         points_idx=[];
+%         for j=child_tree{i}'
+%             points_idx=[points_idx,VesData3D_Seg(j).idx(2:end)]; %子树所有索引
+%         end
+%         x=round(VesData3D_Proj(points_idx,1));y=round(512-VesData3D_Proj(points_idx,2));
+%         x = min(max(x, 1), 511);y = min(max(y, 1), 511);
+%         err_old=img_DT(y+m*(x-1));
+%         err_old=mean(err_old);
+%         %%%
+% 
+% 
+%         startid=VesData3D_Seg(i).idx(2);
+%         ap=vesidx(1);
+%         ds=VesData2D_Match(ap,:)-vestemp_proj(1,:);
+% 
+%         %%%位移后误差
+%         points=VesData3D_Proj(points_idx,:)+ds;
+%         x=round(points(:,1));y=round(512-points(:,2));
+%         x = min(max(x, 1), 511);y = min(max(y, 1), 511);
+%         err_new=img_DT(y+m*(x-1));
+%         err_new=mean(err_new);
+%         %%%
+%         if err_new<err_old
+%             vestemp_proj(2:num_pot,:)=vestemp_proj(2:num_pot,:)+ds;
+%             VesData3D_Proj(points_idx,:)=VesData3D_Proj(points_idx,:)+ds;
+%         end     
+%         vestemp_proj(1,:)=[];
+%     elseif i~=1 && norm(ds)<=2
+%         vestemp_proj(1,:)=[];
+%     end
+% 
+% 
+%     NS=createns(vessel_2D,'NSMethod','kdtree');
+%     [idxs,~]=knnsearch(NS,vestemp_proj,'k',1);
+%     vessel_2Dmatch=vessel_2D(idxs,:);   %投影点在DSA分割血管中的最近对应点
+% 
+%     %%%%算误差
+%     vestemp_proj1=double(round(vestemp_proj));%专门算距离
+%     x=vestemp_proj1(:,1);
+%     y=512-vestemp_proj1(:,2);
+%     x = min(max(x, 1), 511);%！！新增
+%     y = min(max(y, 1), 511);%！！新增
+% 
+%     disterr=img_DT(y+m*(x-1));
+%     vestemp_err=mean(disterr);
+%     %%%%
+% 
+% 
+% 
+%     %求投影的img_DT
+%     vestemp_proj2=expand_points(vestemp_proj);%%扩充为它周围的四个点
+%     Projimg=zeros(m,m);
+%     for j=1:size(vestemp_proj2,1)
+%         x=vestemp_proj2(j,1); %!!新增
+%         y=512-vestemp_proj2(j,2);%!!新增
+%         x = min(max(x, 1), 511);%!!新增
+%         y = min(max(y, 1), 511);%!!新增
+%         Projimg(y,x)=1;%!!新增
+%     end
+%     Projimg_DT=bwdist(Projimg);
+% 
+% 
+% 
+%     %起点和终点对应点的坐标
+%     %startpot=vessel_2Dmatch(1,:);
+%     startpot=round([vestemp_proj(1,1),vestemp_proj(1,2)]); %起点改为自身
+%     endpot=vessel_2Dmatch(end,:);
+% 
+%     if norm(vestemp_proj(end,:)-endpot)<=2 && vestemp_err<0.2
+%         %最短路代码更改  new 
+%         [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2,Projimg_DT,img_DT);
+%         if f==0,continue;end
+%         vestemp_2d=[xs',512-ys'];
+%         [dist,path]=DTW(vestemp_proj,vestemp_2d);
+%         if dist>300,continue;end
+%         path1=path(:,1);
+%         path2=path(:,2);
+%         vestempproj=vestemp_proj(path1,:);
+%         vestemp2d=vestemp_2d(path2,:);
+% 
+%         pair_diff = vestempproj-vestemp2d;
+%         pair_d2 = sum(pair_diff.^2, 2);     % 欧氏距离平方即可比较大小，省一次 sqrt
+% 
+%         % 对每个 proj 点选最小距离的 2D 匹配
+%         for j = startid:endid
+%             rows = find(path1 == j-startid+1);
+%             if isempty(rows), continue; end
+%             [~, rel_min_pos] = min(pair_d2(rows));
+%             best_row = rows(rel_min_pos);        % path 中的最佳行
+%             VesData2D_Match(j,:) = vestemp_2d(path2(best_row),:);
+% 
+%             if norm(VesData2D_Match(j,:)-round(VesData3D_Proj(j,:)))<2
+%                 weight_solve(j)=0;
+%             end
+%         end
+% 
+%         X=[vestempproj(:,1)';vestemp2d(:,1)'];
+%         Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+%         line(X,Y);
+%     else
+%         %找终点周围25距离内的中心线上的所有点
+%         endproj=vestemp_proj(end,:);
+% 
+%         dist_search=25;
+%         inx=vecnorm(VesData2D.Centerline-repmat(endproj,[size(VesData2D.Centerline,1),1]),2,2)<dist_search;
+%         ves2d_seg_all=VesData2D.Centerline(inx,:);
+%         % ves2d_seg_all(end+1,:)=[endproj(1),endproj(2)];
+%         [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2,Projimg_DT,img_DT);
+% 
+%         val_bif=[];
+%         val_dtw=[];
+%         val_id=[];
+%         path_all={};
+%         vestemp_2d_all={};
+% 
+%         if f~=0
+%             vestemp_2d=[xs',512-ys']; %DSA分割图像中的对应路径
+%             veslen_2d=getveslen(vestemp_2d);
+%             [dist,path]=DTW(vestemp_proj,vestemp_2d);
+%             val_dtw=dist/size(path,1);
+%             val_id=0;
+%             path_all{end+1}=path;
+%             vestemp_2d_all{end+1}=vestemp_2d;
+%             val_bif=0;
+%         end
+%         for k=1:size(ves2d_seg_all,1)
+%             [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),ves2d_seg_all(k,1)],[512-startpot(2),512-ves2d_seg_all(k,2)],1,2,Projimg_DT,img_DT);
+%             if f==0,continue;end
+% 
+%             %分岔点相关
+%             % [idx_bif,~]=find(all(bsxfun(@eq,VesData2D.Centerline,ves2d_seg_all(k,:)),2));
+%             % if degree(idx_bif)>=3 && degree3d(endid)>=3
+%             %     val_bif=[val_bif,-0.2];
+%             %     scatter(ves2d_seg_all(k,1),ves2d_seg_all(k,2));
+%             %     % disp("找到分岔点！！！");
+%             % else
+%             %     val_bif=[val_bif,0];
+%             % end
+% 
+%             vestemp_2d=[xs',512-ys'];
+%             [dist,path]=DTW(vestemp_proj,vestemp_2d);
+%             val_dtw=[val_dtw,dist/size(path,1)];
+%             val_id=[val_id,k];
+%             path_all{end+1}=path;
+%             vestemp_2d_all{end+1}=vestemp_2d;
+%         end
+% 
+%         [~,idxx]=min(val_dtw);
+% 
+%         if isempty(idxx)||val_dtw(idxx)>500 %周围找不到对应点，或找不到最短路
+%             [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),round(endproj(1))],[512-startpot(2),512-round(endproj(2))],1,2,Projimg_DT,img_DT);
+%             if f==0,continue;end
+%             vestemp_2d=[xs',512-ys'];
+%             [dist,path]=DTW(vestemp_proj,vestemp_2d);
+% 
+%             path_all{end+1}=path;
+%             vestemp_2d_all{end+1}=vestemp_2d;
+%             idxx=size(path_all,1);
+%         end
+% 
+% 
+%         minpath=path_all{idxx};
+%         minvestemp_2d=vestemp_2d_all{idxx};
+% 
+%         path1=minpath(:,1);
+%         path2=minpath(:,2);
+%         vestempproj=vestemp_proj(path1,:);
+%         vestemp2d=minvestemp_2d(path2,:);
+%         pair_diff = vestempproj-vestemp2d;
+%         pair_d2 = sum(pair_diff.^2,2);
+% 
+% 
+%         for j = startid:endid
+%             rows = find(path1 == j-startid+1);
+%             if isempty(rows), continue; end
+%             [~ , rel_min_pos] = min(pair_d2(rows));
+%             best_row = rows(rel_min_pos);
+%             VesData2D_Match(j,:) = minvestemp_2d(path2(best_row),:);
+% 
+%             if norm(VesData2D_Match(j,:)-round(VesData3D_Proj(j,:)))<2
+%                 weight_solve(j)=0;
+%             end
+% 
+%         end
+% 
+%         % if val_bif(idxx)~=0 %选到分岔点了
+%         %     VesData2D_Match(j,:)=ves2d_seg_all(val_id(idxx),:);
+%         % end
+% 
+%         X=[vestempproj(:,1)';vestemp2d(:,1)'];
+%         Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+%         line(X,Y);
+%     end
+% 
+% 
+% end
+% 
+% end
+
+
+
+
+
+
+
+
+
+%ver-1
+% function VesData2D_Match = DenseMatching(VesData3D_Seg,VesData2D,N,VesData3D_Proj)
+% Num_seg=size(VesData3D_Seg,2);
+% VesData2D_Match=VesData3D_Proj; %%解决了向零点拉扯的问题
+% vessel_2D=VesData2D.node_positions;
+% img_DT=VesData2D.img_DT;
+% m=size(img_DT,1);
+% NN=size(vessel_2D,1);
+% 
+% NS=createns(vessel_2D,'NSMethod','kdtree');
+% [idxs,~]=knnsearch(NS,VesData3D_Proj,'k',1);
+% vessel_2Dmatch=vessel_2D(idxs,:);
+% 
+% % 这里要取消注释
+% figure;
+% plot(vessel_2D(:,1),vessel_2D(:,2),'g.');
+% hold on;
+% plot(VesData3D_Proj(:,1),VesData3D_Proj(:,2),'r.');
+% axis equal
+% 
+% 
+% 
+% for i=1:Num_seg
+%     vestemp=VesData3D_Seg(i).positions;
+%     vestemp_proj=Proj(vestemp',VesData2D.K);
+%     vestemp_proj1=double(round(vestemp_proj));%专门算距离
+%     x=vestemp_proj1(:,1);
+%     y=512-vestemp_proj1(:,2);
+%     x = min(max(x, 1), 511);%！！新增
+%     y = min(max(y, 1), 511);%！！新增
+% 
+%     disterr=img_DT(y+m*(x-1));
+%     vestemp_err=mean(disterr);
+% 
+%     num_pot=size(vestemp,1);%这一段的点数量
+%     %起点和终点的id号
+%     startid=VesData3D_Seg(i).idx(1);endid=VesData3D_Seg(i).idx(num_pot);
+% 
+%     %求投影的img_DT
+%     vestemp_proj2=expand_points(vestemp_proj);%%扩充为它周围的四个点
+%     Projimg=zeros(m,m);
+%     for j=1:size(vestemp_proj2,1)
+%         x=vestemp_proj2(j,1); %!!新增
+%         y=512-vestemp_proj2(j,2);%!!新增
+%         x = min(max(x, 1), 511);%!!新增
+%         y = min(max(y, 1), 511);%!!新增
+%         Projimg(y,x)=1;%!!新增
+%         % Projimg(m-vestemp_proj2(j,2),vestemp_proj2(j,1))=1;
+%     end
+%     Projimg_DT=bwdist(Projimg);
+% 
+%     seq1 = shapedis(vestemp_proj);
+% 
+%     % if vestemp_var>3
+%     %     plot(x,512-y,'r.');
+%     %     hold on;
+%     % end
+% 
+%     if vestemp_err<0.4
+%         %起点和终点对应点的坐标
+%         startpot=vessel_2Dmatch(startid,:);endpot=vessel_2Dmatch(endid,:);
+%         %根据起点和终点对应点找到一条最短路径
+%         [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2,Projimg_DT);
+%         if f==0,break;end %！！新增
+%         vestemp_2d=[xs',512-ys'];
+% 
+%         [dist, path] = DTW(vestemp_proj, vestemp_2d);
+%         if dist>10,continue;end %仍可能出现错误对应点产生的较大偏离，！！
+%         path1=path(:,1);
+%         path2=path(:,2);
+%         vestempproj=vestemp_proj(path1,:);
+%         vestemp2d=vestemp_2d(path2,:);
+% 
+%         pair_diff = vestempproj-vestemp2d;
+%         pair_d2 = sum(pair_diff.^2, 2);     % 欧氏距离平方即可比较大小，省一次 sqrt
+% 
+%         % 对每个 proj 点选最小距离的 2D 匹配
+%         for j = startid:endid
+%             rows = find(path1 == j-startid+1);
+%             if isempty(rows), continue; end
+%             [~, rel_min_pos] = min(pair_d2(rows));
+%             best_row = rows(rel_min_pos);        % path 中的最佳行
+%             VesData2D_Match(j,:) = vestemp_2d(path2(best_row),:);
+%         end
+% 
+%         X=[vestempproj(:,1)';vestemp2d(:,1)'];
+%         Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+%         line(X,Y);
+% 
+%     else
+%         %起点和终点对应点的坐标
+%         startpot=vessel_2Dmatch(startid,:);
+%         endpot=vessel_2Dmatch(endid,:);
+% 
+%         %找终点周围25距离内的所有点(改动!!!!!!!!!!!!!)
+%         endproj=vestemp_proj(end,:);
+% 
+% 
+%         inx=vecnorm(VesData2D.Centerline-repmat(endproj,[size(VesData2D.Centerline,1),1]),2,2)<15;
+%         ves2d_seg_all=VesData2D.Centerline(inx,:);
+%         % inx=vecnorm(vessel_2D-repmat(endproj,[NN,1]),2,2)<25;
+%         % ves2d_seg_all=vessel_2D(inx,:);
+%         [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2,Projimg_DT);
+%         if f==0,break;end %！！新增 有大概率出问题要改！！！！
+%         vestemp_2d=[xs',512-ys'];
+% 
+%         % 版本1
+%         % [xs,ys]=shortestway2(VesData2D.Map,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2);
+%         % vestemp_2d=[xs',512-ys'];
+%         % vestemp_2d=find_shortest_path(startpot,endpot,vessel_2D);
+% 
+%         seq2=shapedis(vestemp_2d);
+% 
+% 
+%         [dist1,~]=DTW_1d(seq1,seq2);
+% 
+%         [dist,path]=DTW(vestemp_proj,vestemp_2d);
+%         % mindist=dist;
+%         minval=dist+dist1*0; %10
+%         minpath=path;
+%         minvestemp_2d=vestemp_2d;
+% 
+%         for k=1:size(ves2d_seg_all,1)
+%             [xs,ys,f]=shortestway2d(VesData2D.Map,[startpot(1),ves2d_seg_all(k,1)],[512-startpot(2),512-ves2d_seg_all(k,2)],1,2,Projimg_DT);
+%             if f==0,continue;end
+%             vestemp_2d=[xs',512-ys'];
+%             % 版本1
+%             % [xs,ys]=shortestway2(VesData2D.Map,[startpot(1),ves2d_seg_all(k,1)],[512-startpot(2),512-ves2d_seg_all(k,2)],1,2);
+%             % vestemp_2d=[xs',512-ys'];
+%             % vestemp_2d=find_shortest_path(startpot,ves2d_seg_all(k,:),vessel_2D);
+% 
+%             seq2=shapedis(vestemp_2d);
+% 
+%             [dist1,~]=DTW_1d(seq1,seq2);
+% 
+%             [dist,path]=DTW(vestemp_proj,vestemp_2d);
+%             % if dist<mindist
+%             if dist+dist1*0<minval
+%                 % mindist=dist;
+%                 minval=dist+dist1*0;
+%                 minpath=path;
+%                 minvestemp_2d=vestemp_2d;
+%             end
+% 
+%         end
+% 
+%         path1=minpath(:,1);
+%         path2=minpath(:,2);
+%         vestempproj=vestemp_proj(path1,:);
+%         vestemp2d=minvestemp_2d(path2,:);
+%         pair_diff = vestempproj-vestemp2d;
+%         pair_d2 = sum(pair_diff.^2,2);
+% 
+%         for j = startid:endid
+%             rows = find(path1 == j-startid+1);
+%             if isempty(rows), continue; end
+%             [~ , rel_min_pos] = min(pair_d2(rows));
+%             best_row = rows(rel_min_pos);
+%             VesData2D_Match(j,:) = minvestemp_2d(path2(best_row),:);
+%         end
+% 
+%         X=[vestempproj(:,1)';vestemp2d(:,1)'];
+%         Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+%         line(X,Y);
+% 
+%     end
+% 
+% end
+% 
+% end
+
+function [VesData2D_Match,weight_solve] = DenseMatching(VesData3D_Seg,VesData2D,N,VesData3D_Proj,w)
+Num_seg=size(VesData3D_Seg,2);
+VesData2D_Match=VesData3D_Proj; %%解决了向零点拉扯的问题
+vessel_2D=VesData2D.node_positions; %DSA分割血管
+vessel_2D=VesData2D.Centerline;   %%%!!!!!
+img_DT=VesData2D.img_DT; 
+img_DT=VesData2D.img_DT_Centerline;  %%%!!!!!!
+m=size(img_DT,1);
+NN=size(vessel_2D,1);
+
+
+
+VesData2D_truematch=zeros(size(VesData3D_Proj,1),2);%%%计算真值
+
+projdist=sqrt(sum((VesData3D_Proj-VesData3D_Proj(1,:)).^2,2));
+maxprojdist=max(projdist);
+%
+weight_solve=ones(size(VesData3D_Proj,1),1);
+
+
+% 这里要取消注释
+figure;
+plot(vessel_2D(:,1),vessel_2D(:,2),'.','Color',[83/255,214/255,0/255]);
+hold on;
+plot(VesData3D_Proj(:,1),VesData3D_Proj(:,2),'r.');
+% plot(VesData2D.Centerline(:,1),VesData2D.Centerline(:,2),'b.');
+axis equal
+
+
+%%%找到子树 new
+child_tree=cell(Num_seg,1);
+parent=zeros(Num_seg,1);
+for i=1:Num_seg
+    child_tree{i}=i;
+    endid=VesData3D_Seg(i).idx(end);
+    for j=i+1:Num_seg
+        startid=VesData3D_Seg(j).idx(1);
+        if startid==endid
+            parent(j)=i;
+        end
+    end
+end
+for i=Num_seg:-1:2
+    par=parent(i);
+    child_tree{par}=[child_tree{par};child_tree{i}];
+end
+%%%
+
+VVV=VesData2D.img_DT_Centerline;
+VVV(VesData2D.img_DT_Centerline>0)=0;
+VVV(VesData2D.img_DT_Centerline==0)=1;
+
+for i=1:Num_seg
+    vesidx=VesData3D_Seg(i).idx;
+    %vestemp_proj=Proj(vestemp',VesData2D.K); %该段的投影
+    vestemp_proj=VesData3D_Proj(vesidx,:); %3D投影点
+
+    %起点和终点的id号
+    
+    startid=VesData3D_Seg(i).idx(2);endid=VesData3D_Seg(i).idx(end);
+    if i==1, startid=VesData3D_Seg(i).idx(1);end
+    
+    if i~=1, vestemp_proj(1,:)=[];end %bug!!!
+    
+    NS=createns(vessel_2D,'NSMethod','kdtree');
+    [idxs,~]=knnsearch(NS,vestemp_proj,'k',1);
+    vessel_2Dmatch=vessel_2D(idxs,:);   %投影点在DSA分割血管中的最近对应点
+    
+    %%%%算误差
+    vestemp_proj1=double(round(vestemp_proj));%专门算距离
+    x=vestemp_proj1(:,1);
+    y=512-vestemp_proj1(:,2);
+    x = min(max(x, 1), 511);%！！新增
+    y = min(max(y, 1), 511);%！！新增
+
+    disterr=img_DT(y+m*(x-1));
+    vestemp_err=mean(disterr);
+    %%%%
+    
+
+    
+    %求投影的img_DT
+    vestemp_proj2=expand_points(vestemp_proj);%%扩充为它周围的四个点
+    Projimg=zeros(m,m);
+    for j=1:size(vestemp_proj2,1)
+        x=vestemp_proj2(j,1); %!!新增
+        y=512-vestemp_proj2(j,2);%!!新增
+        x = min(max(x, 1), 511);%!!新增
+        y = min(max(y, 1), 511);%!!新增
+        Projimg(y,x)=1;%!!新增
+    end
+    Projimg_DT=bwdist(Projimg);
+
+
+    
+    %起点和终点对应点的坐标
+    %startpot=vessel_2Dmatch(1,:);
+    startpot=round([vestemp_proj(1,1),vestemp_proj(1,2)]); %起点改为自身
+    startpot=vessel_2Dmatch(1,:);  %%%!!!
+    endpot=vessel_2Dmatch(end,:);
+
+    if length(child_tree{i}) == 1   %是端点
+        if vestemp_err<0.5   %%%!!!
+            [xs,ys,f]=shortestway2d(VVV,[startpot(1),endpot(1)],[512-startpot(2),512-endpot(2)],1,2,Projimg_DT,img_DT);
+            if f==0,continue;end
+            vestemp_2d=[xs',512-ys'];
+
+            len_2d=size(vestemp_2d,1);
+            if len_2d>=endid-startid+1
+                VesData2D_truematch(startid:endid,:)=vestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+            else
+                VesData2D_truematch(1,:)=vestemp_2d(1,:);
+                VesData2D_truematch(startid+1:endid,:)=vestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+            end
+            plot(VesData2D_truematch(startid:endid,1),VesData2D_truematch(startid:endid,2),'b*');
+
+
+            [~,path]=DTW(vestemp_proj,vestemp_2d);
+            path1=path(:,1);
+            path2=path(:,2);
+            vestempproj=vestemp_proj(path1,:);
+            vestemp2d=vestemp_2d(path2,:);
+    
+            pair_diff = vestempproj-vestemp2d;
+            pair_d2 = sum(pair_diff.^2, 2);     % 欧氏距离平方即可比较大小，省一次 sqrt
+
+            % 对每个 proj 点选最小距离的 2D 匹配
+            for j = startid:endid
+                rows = find(path1 == j-startid+1);
+                if isempty(rows), continue; end
+                [~, rel_min_pos] = min(pair_d2(rows));
+                best_row = rows(rel_min_pos);        % path 中的最佳行
+                VesData2D_Match(j,:) = vestemp_2d(path2(best_row),:);
+    
+                % if norm(VesData2D_Match(j,:)-round(VesData3D_Proj(j,:)))<2
+                %     weight_solve(j)=0;
+                % end
+            end
+    
+            X=[vestempproj(:,1)';vestemp2d(:,1)'];
+            Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+            line(X,Y);
+        else
+
+            %找终点周围25距离内的中心线上的所有点
+            endproj=vestemp_proj(end,:);
+    
+            dist_search=30;
+            inx=vecnorm(VesData2D.Centerline-repmat(endproj,[size(VesData2D.Centerline,1),1]),2,2)<dist_search;
+            ves2d_seg_all=VesData2D.Centerline(inx,:);
+            
+            val_dtw=[];
+            path_all={};
+            vestemp_2d_all={};
+            for k=1:size(ves2d_seg_all,1)
+                [xs,ys,f]=shortestway2d(VVV,[startpot(1),ves2d_seg_all(k,1)],[512-startpot(2),512-ves2d_seg_all(k,2)],1,2,Projimg_DT,img_DT);
+                if f==0,continue;end
+    
+                vestemp_2d=[xs',512-ys'];
+                [dist,path]=DTW(vestemp_proj,vestemp_2d);
+                val_dtw=[val_dtw,dist/size(path,1)];
+                path_all{end+1}=path;
+                vestemp_2d_all{end+1}=vestemp_2d;
+            end
+    
+            [~,idxx]=min(val_dtw);
+    
+            if isempty(idxx)||val_dtw(idxx)>200 %周围找不到对应点，或找不到最短路
+                [xs,ys,f]=shortestway2d(VVV,[startpot(1),round(endproj(1))],[512-startpot(2),512-round(endproj(2))],1,2,Projimg_DT,img_DT);
+                if f==0
+                    disp('problem');
+                    continue;
+                end
+                vestemp_2d=[xs',512-ys'];
+                [~,path]=DTW(vestemp_proj,vestemp_2d);
+    
+                path_all{end+1}=path;
+                vestemp_2d_all{end+1}=vestemp_2d;
+                idxx=size(path_all,1);
+            end
+    
+    
+            minpath=path_all{idxx};
+            minvestemp_2d=vestemp_2d_all{idxx};
+    
+            len_2d=size(minvestemp_2d,1);
+            if len_2d>=endid-startid+1
+                VesData2D_truematch(startid:endid,:)=minvestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+            else
+                VesData2D_truematch(startid,:)=minvestemp_2d(1,:);
+                VesData2D_truematch(startid+1:endid,:)=minvestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+            end
+            plot(VesData2D_truematch(startid:endid,1),VesData2D_truematch(startid:endid,2),'b*');
+
+            path1=minpath(:,1);
+            path2=minpath(:,2);
+            vestempproj=vestemp_proj(path1,:);
+            vestemp2d=minvestemp_2d(path2,:);
+            pair_diff = vestempproj-vestemp2d;
+            pair_d2 = sum(pair_diff.^2,2);
+    
+  
+            for j = startid:endid
+                rows = find(path1 == j-startid+1);
+                if isempty(rows), continue; end
+                [~ , rel_min_pos] = min(pair_d2(rows));
+                best_row = rows(rel_min_pos);
+                VesData2D_Match(j,:) = minvestemp_2d(path2(best_row),:);
+    
+                % if norm(VesData2D_Match(j,:)-round(VesData3D_Proj(j,:)))<2
+                %     weight_solve(j)=0;
+                % end
+                if idxx==1
+                    weight_solve(j)=0;
+                end
+    
+            end
+
+            X=[vestempproj(:,1)';vestemp2d(:,1)'];
+            Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+            line(X,Y);
+        end
+    else
+        endproj=vestemp_proj(end,:);
+        scope_search=norm(endproj-VesData3D_Proj(1,:))/maxprojdist*60;  %%%!!!
+        inx=vecnorm(vessel_2D-repmat(endproj,[NN,1]),2,2)<scope_search;
+        ves2d_seg_all=vessel_2D(inx,:);
+        
+        ves2d_seg_all(end+1,:)=endproj; %加入自身
+        ds=ves2d_seg_all-endproj;
+        err_child=zeros(size(ves2d_seg_all,1),1);
+        %求子树
+        points_idx=[];
+        for j=child_tree{i}(2:end)'
+            points_idx=[points_idx,VesData3D_Seg(j).idx(2:end)]; %子树所有索引
+        end
+        %求误差
+        for j=1:size(ves2d_seg_all,1)
+            err_child(j)=MeasureError_2d(img_DT,VesData3D_Proj(points_idx,:) ...
+                +ds(j,:),w(points_idx))+0.8*norm(ds(j,:))/scope_search;
+        end
+        [~,idxx]=min(err_child); %存在找不到的可能性,加入自身后，应该不存在这种可能了
+        if isempty(idxx)
+            ds=0;
+            idxx=1;
+        end
+        %子树追踪
+        
+        VesData3D_Proj(points_idx,:)=VesData3D_Proj(points_idx,:)+ds(idxx,:);
+        %找对应点
+        endproj_new=endproj+ds(idxx,:);
+        [idxs,~]=knnsearch(NS,endproj_new,'k',1);
+        endproj_new=vessel_2D(idxs,:);   %投影点在DSA分割血管中的最近对应点
+    
+        %%%!!!VesData2D.Map
+        [xs,ys,f]=shortestway2d(VVV,[startpot(1),endproj_new(1)],[512-startpot(2),512-endproj_new(2)],1,2,Projimg_DT,img_DT); 
+        if f==0
+            disp('problem!');
+            continue;
+        end  %有隐患！！！
+        vestemp_2d=[xs',512-ys'];
+
+        len_2d=size(vestemp_2d,1);
+        if len_2d>=endid-startid+1
+            VesData2D_truematch(startid:endid,:)=vestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+        else
+            VesData2D_truematch(1,:)=vestemp_2d(1,:);
+            VesData2D_truematch(startid+1:endid,:)=vestemp_2d(1:(len_2d/(endid-startid+1)):end,:);
+        end
+
+        
+
+
+        [~,path]=DTW(vestemp_proj,vestemp_2d);
+        path1=path(:,1);
+        path2=path(:,2);
+        vestempproj=vestemp_proj(path1,:);
+        vestemp2d=vestemp_2d(path2,:);
+
+        pair_diff = vestempproj-vestemp2d;
+        pair_d2 = sum(pair_diff.^2, 2);     % 欧氏距离平方即可比较大小，省一次 sqrt
+
+        % 对每个 proj 点选最小距离的 2D 匹配
+        for j = startid:endid
+            rows = find(path1 == j-startid+1);
+            if isempty(rows), continue; end
+            [~, rel_min_pos] = min(pair_d2(rows));
+            best_row = rows(rel_min_pos);        % path 中的最佳行
+            VesData2D_Match(j,:) = vestemp_2d(path2(best_row),:);
+
+            % if norm(VesData2D_Match(j,:)-round(VesData3D_Proj(j,:)))<2
+            %     weight_solve(j)=0;
+            % end
+        end
+
+        X=[vestempproj(:,1)';vestemp2d(:,1)'];
+        Y=[vestempproj(:,2)';vestemp2d(:,2)'];
+        line(X,Y);
+        
+    end
+
+end
+
+save('DL\LAD_truematch.mat','VesData2D_truematch');
+end
