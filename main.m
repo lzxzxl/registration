@@ -154,7 +154,7 @@ VesselTracking2(VesData3D,VesData3D.adj,Number_seq,Ves2D,dir,Num,outDir,VesData3
 dir=1;
 VesselTracking2(VesData3D,VesData3D.adj,Number_seq,Ves2D,dir,Num,outDir,VesData3D_Seg);
 
-res_path='Result/';
+res_path='Result1/';
 images_to_gif(res_path,fullfile(res_path,'reg.gif'),1/8);
 
 %%播放gif
@@ -172,4 +172,5 @@ while true
         drawnow;
         pause(1/8);   % 控制播放速率（秒）
     end
+
 end
